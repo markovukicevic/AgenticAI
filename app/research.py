@@ -1,11 +1,9 @@
 """
-research_service.py
+app/research.py
 
-The core "research agent" logic: question in, structured answer out.
-This module knows nothing about the command line or HTTP — it's just
-a function that talks to the LLM. Both research.py (CLI) and main.py
-(FastAPI) import and call ask_research_question() from here, so the
-LLM logic exists in exactly one place.
+AI concerns only: question in, structured answer out. This module
+knows nothing about HTTP, request/response objects, or the command
+line — it's a plain function that talks to the LLM.
 
     question
        |
@@ -13,12 +11,25 @@ LLM logic exists in exactly one place.
     OpenRouter
        |
        v
-    structured response (dict)
+    structured result (dict)
+
+Both app/main.py (the FastAPI HTTP layer) and the top-level cli.py
+import ask_research_question() from here, so the LLM logic exists in
+exactly one place regardless of which interface is calling it:
+
+    HTTP concerns          AI concerns
+         |                     |
+         v                     v
+      main.py              research.py
+         |                     |
+         └──────────┬──────────┘
+                     v
+                  result
 
 Setup:
     pip install openai python-dotenv
     export OPENROUTER_API_KEY=sk-or-...
-    (or put OPENROUTER_API_KEY=sk-or-... in a .env file next to this module)
+    (or put OPENROUTER_API_KEY=sk-or-... in a .env file at the project root)
 """
 
 import os

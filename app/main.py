@@ -1,30 +1,34 @@
 """
-main.py
+app/main.py
 
-Stage 1, Step 3: wire the /research route up to the real research
-service instead of echoing the question back. This is the full stack
-now:
+HTTP/API concerns only: routing, request validation, response shaping,
+and translating errors into HTTP status codes. No OpenRouter/prompt/
+LLM code lives here — that's app/research.py's job. This file just
+calls into it:
+
+    result = ask_research_question(request.question)
 
     HTTP layer (this file)
         |
         v
-    research service (research_service.py)
+    research logic (app/research.py)
         |
         v
     LLM (OpenRouter)
 
-Run with:
-    uvicorn main:app --reload
+Run from the project root with:
+    uvicorn app.main:app --reload
 
 Then visit:
     http://127.0.0.1:8000/         -> basic hello response
+    http://127.0.0.1:8000/health   -> health check
     http://127.0.0.1:8000/docs     -> interactive API docs (auto-generated)
 """
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, field_validator
 
-from research_service import ask_research_question
+from app.research import ask_research_question
 
 app = FastAPI(title="Research Agent API")
 
@@ -74,6 +78,7 @@ async def health():
     with OpenRouter.
     """
     return {"status": "ok"}
+
 
 @app.post("/research", response_model=ResearchResponse)
 async def research(request: ResearchRequest):

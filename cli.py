@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
 """
-research.py
+cli.py
 
-CLI entry point. Accepts a research question on the command line and
-prints back a structured JSON research answer.
+CLI entry point for the research agent — the second interface on top
+of app/research.py, alongside the HTTP API in app/main.py. Neither
+interface contains any OpenRouter/prompt logic itself; they both just
+call ask_research_question().
 
-All the actual LLM logic lives in research_service.py — this file is
-just a thin wrapper: parse argv, call the service, print the result
-(or a clean error message).
+    CLI (this file) ──┐
+                       ├──> app/research.py ──> OpenRouter
+    HTTP (app/main.py)┘
 
-Usage:
-    python research.py "Why is nuclear energy difficult to scale?"
-    python research.py --demo   (runs 5 built-in test questions)
+Usage (run from the project root):
+    python cli.py "Why is nuclear energy difficult to scale?"
+    python cli.py --demo   (runs 5 built-in test questions)
 
 Setup:
-    pip install openai python-dotenv
+    pip install -r requirements.txt
     export OPENROUTER_API_KEY=sk-or-...
-    (or put OPENROUTER_API_KEY=sk-or-... in a .env file next to this script)
+    (or put OPENROUTER_API_KEY=sk-or-... in a .env file at the project root)
 """
 
 import sys
 import json
 
-from research_service import ask_research_question
+from app.research import ask_research_question
 
 # A handful of test questions covering different kinds of difficulty,
 # used by `--demo` to smoke-test the pipeline end to end.
@@ -51,8 +53,8 @@ def run_demo():
 
 def main():
     if len(sys.argv) < 2:
-        print('Usage: python research.py "your research question"')
-        print('       python research.py --demo   (runs 5 built-in test questions)')
+        print('Usage: python cli.py "your research question"')
+        print('       python cli.py --demo   (runs 5 built-in test questions)')
         sys.exit(1)
 
     if sys.argv[1] == "--demo":
@@ -61,7 +63,7 @@ def main():
 
     question = " ".join(sys.argv[1:]).strip()
     if not question:
-        print('Usage: python research.py "your research question"')
+        print('Usage: python cli.py "your research question"')
         sys.exit(1)
 
     try:
