@@ -139,8 +139,6 @@ def _call_llm_with_retries(client: OpenAI, question: str, request_id: str):
     anything else (bad request, bad auth, ...) is raised immediately
     on the first failure, since trying again wouldn't change anything.
     """
-    logger.info("Starting research request: request_id=%s",
-                request_id)
 
     logger.info(
         "Sending research request request_id=%s to model=%s",
@@ -245,7 +243,6 @@ def _call_llm_with_retries(client: OpenAI, question: str, request_id: str):
 
 
 def ask_research_question(question: str) -> dict:
-    request_id = str(uuid.uuid4())
     """Send the question to the LLM and return a structured result dict.
 
     Raises RuntimeError on any failure to contact or parse the model's
@@ -254,6 +251,7 @@ def ask_research_question(question: str) -> dict:
     about HTTP status codes.
     """
 
+    request_id = str(uuid.uuid4())
 
     logger.info(
         "Research request started: request_id=%s",
@@ -267,13 +265,17 @@ def ask_research_question(question: str) -> dict:
         message = response.choices[0].message
         tool_call = message.tool_calls[0]
         data = json.loads(tool_call.function.arguments)
-    except (IndexError, AttributeError, TypeError, json.JSONDecodeError):
-        # The model responded, but not in the shape we asked for. This
-        # is a different failure class from a network/upstream error:
-        # asking again with the same input might just produce the same
-        # bad response again, and it isn't "temporary" in the retry
-        # sense. We surface it immediately rather than auto-retrying.
-        raise RuntimeError("Research failed: the AI service returned an unexpected response.")
+
+    except (IndexError, AttributeError, TypeError, json.JSONDecodeError) as e:
+        logger.error(
+            "Research response parsing failed: request_id=%s error_type=%s",
+            request_id,
+            type(e).__name__,
+        )
+
+        raise RuntimeError(
+            "Research failed: the AI service returned an unexpected response."
+        ) from e
 
     return {
         "question": question,
