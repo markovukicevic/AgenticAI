@@ -29,7 +29,7 @@ exactly one place regardless of which interface is calling it:
 Setup:
     pip install openai python-dotenv
     export OPENROUTER_API_KEY=sk-or-...
-    (or put OPENROUTER_API_KEY=sk-or-... in a .env file at the project root)
+    (or put OPENROUTER_API_KEY=sk-or-... in a ..env file at the project root)
 """
 
 import os
@@ -38,10 +38,6 @@ import time
 import logging
 import uuid
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
-from dotenv import load_dotenv
 from openai import (
     OpenAI,
     APIConnectionError,
@@ -51,8 +47,19 @@ from openai import (
     APIStatusError,
 )
 
-load_dotenv()  # pulls OPENROUTER_API_KEY from a .env file, if present
+from app.metrics import (
+    record_request_started,
+    record_request_success,
+    record_request_failed,
+    record_retry,
+    record_usage,
+)
 
+from dotenv import load_dotenv
+load_dotenv()  # pulls OPENROUTER_API_KEY from a ..env file, if present
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Any model OpenRouter serves that supports tool calling works here.
 # See https://openrouter.ai/models for the full list.
@@ -176,6 +183,11 @@ def _call_llm_with_retries(client: OpenAI, question: str, request_id: str):
                     usage.total_tokens,
                 )
 
+                record_usage(
+                    prompt_tokens=usage.prompt_tokens,
+                    completion_tokens=usage.completion_tokens,
+                    total_tokens=usage.total_tokens,)
+
             logger.info(
                 "LLM response received: request_id=%s model=%s finish_reason=%s",
                 request_id,
@@ -197,7 +209,10 @@ def _call_llm_with_retries(client: OpenAI, question: str, request_id: str):
             duration = time.perf_counter() - start_time
             last_error = e
 
+
             if attempt < MAX_ATTEMPTS:
+                record_retry()
+
                 delay = BASE_DELAY_SECONDS * (2 ** (attempt - 1))  # 1, 2, 4, ...
                 logger.warning(
                     "Attempt %d/%d failed after %.2fs (%s: %s); retrying in %ds",
@@ -253,13 +268,20 @@ def ask_research_question(question: str) -> dict:
 
     request_id = str(uuid.uuid4())
 
+    record_request_started()
+
     logger.info(
         "Research request started: request_id=%s",
         request_id,
     )
 
     client = get_client()
-    response = _call_llm_with_retries(client, question, request_id)
+
+    try:
+        response = _call_llm_with_retries(client, question, request_id)
+    except RuntimeError:
+        record_request_failed()
+        raise
 
     try:
         message = response.choices[0].message
@@ -267,6 +289,8 @@ def ask_research_question(question: str) -> dict:
         data = json.loads(tool_call.function.arguments)
 
     except (IndexError, AttributeError, TypeError, json.JSONDecodeError) as e:
+        record_request_failed()
+
         logger.error(
             "Research response parsing failed: request_id=%s error_type=%s",
             request_id,
@@ -276,6 +300,8 @@ def ask_research_question(question: str) -> dict:
         raise RuntimeError(
             "Research failed: the AI service returned an unexpected response."
         ) from e
+
+    record_request_success()
 
     return {
         "question": question,

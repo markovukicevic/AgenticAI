@@ -27,6 +27,7 @@ Then visit:
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, field_validator
+from app.metrics import get_metrics
 
 from app.research import ask_research_question
 
@@ -98,3 +99,7 @@ async def research(request: ResearchRequest):
         raise HTTPException(status_code=502, detail=str(e))
 
     return result
+
+@app.get("/metrics")
+def metrics():
+    return get_metrics()
