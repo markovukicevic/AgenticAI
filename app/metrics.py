@@ -13,6 +13,8 @@ class ResearchMetrics:
     completion_tokens_total: int = 0
     total_tokens: int = 0
 
+    request_duration_seconds_total: float = 0.0
+
 
 _metrics = ResearchMetrics()
 _lock = threading.Lock()
@@ -49,6 +51,11 @@ def record_usage(
         _metrics.total_tokens += total_tokens
 
 
+def record_request_duration(duration_seconds: float) -> None:
+    with _lock:
+        _metrics.request_duration_seconds_total += duration_seconds
+
+
 def get_metrics() -> dict:
     with _lock:
         return {
@@ -59,4 +66,5 @@ def get_metrics() -> dict:
             "prompt_tokens_total": _metrics.prompt_tokens_total,
             "completion_tokens_total": _metrics.completion_tokens_total,
             "total_tokens": _metrics.total_tokens,
+            "request_duration_seconds_total": _metrics.request_duration_seconds_total,
         }
