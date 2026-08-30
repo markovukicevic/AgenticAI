@@ -53,8 +53,19 @@ class FakeRetryableError(Exception):
 
 class TestResearchMetrics(unittest.TestCase):
     def setUp(self):
-        # Start every test with clean metrics.
-        metrics._metrics = metrics.ResearchMetrics()
+        # Prometheus counters are module-level objects, so reset their
+        # values before each test to keep tests isolated.
+        for metric in (
+            metrics.requests_total,
+            metrics.requests_success,
+            metrics.requests_failed,
+            metrics.retries_total,
+            metrics.prompt_tokens_total,
+            metrics.completion_tokens_total,
+            metrics._total_tokens_counter,
+            metrics.request_duration_seconds_total,
+        ):
+            metric._value.set(0)
 
     def test_successful_request_records_success_and_usage(self):
         response = make_success_response(
@@ -216,23 +227,28 @@ class TestResearchMetrics(unittest.TestCase):
         )
 
         with patch.object(
-                research,
-                "get_client",
-                return_value=fake_client,
+            research,
+            "get_client",
+            return_value=fake_client,
         ):
-            # perf_counter() is called four times:
-            #
-            # 1. ask_research_question() -> request start
-            # 2. _call_llm_with_retries() -> LLM call start
-            # 3. _call_llm_with_retries() -> LLM call end
-            # 4. ask_research_question() -> request end
-            #
-            # We want the overall request duration to be:
-            # 102.5 - 100.0 = 2.5 seconds.
+            # Return deterministic timing values without making the test
+            # depend on the exact number of internal perf_counter() calls.
+            # The request starts at 100.0 and the final request duration is
+            # calculated from 102.5, so the recorded duration is 2.5 seconds.
+            counter_values = iter([100.0, 101.0, 102.5])
+
+            def fake_perf_counter():
+                try:
+                    return next(counter_values)
+                except StopIteration:
+                    # If the implementation calls perf_counter() again, keep
+                    # returning the final timestamp rather than failing the test.
+                    return 102.5
+
             with patch.object(
-                    research.time,
-                    "perf_counter",
-                    side_effect=[100.0, 100.5, 102.0, 102.5],
+                research.time,
+                "perf_counter",
+                side_effect=fake_perf_counter,
             ):
                 result = research.ask_research_question("Test question")
 
@@ -243,6 +259,7 @@ class TestResearchMetrics(unittest.TestCase):
             current["request_duration_seconds_total"],
             2.5,
         )
+
 
 if __name__ == "__main__":
     unittest.main()

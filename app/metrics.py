@@ -1,43 +1,62 @@
-import threading
-from dataclasses import dataclass
+from prometheus_client import Counter
 
 
-@dataclass
-class ResearchMetrics:
-    requests_total: int = 0
-    requests_success: int = 0
-    requests_failed: int = 0
-    retries_total: int = 0
+# Prometheus counters for research metrics.
+requests_total = Counter(
+    "research_requests",
+    "Total number of research requests",
+)
 
-    prompt_tokens_total: int = 0
-    completion_tokens_total: int = 0
-    total_tokens: int = 0
+requests_success = Counter(
+    "research_requests_success",
+    "Total number of successful research requests",
+)
 
-    request_duration_seconds_total: float = 0.0
+requests_failed = Counter(
+    "research_requests_failed",
+    "Total number of failed research requests",
+)
 
+retries_total = Counter(
+    "research_retries",
+    "Total number of LLM retries",
+)
 
-_metrics = ResearchMetrics()
-_lock = threading.Lock()
+prompt_tokens_total = Counter(
+    "research_prompt_tokens",
+    "Total number of prompt tokens used",
+)
+
+completion_tokens_total = Counter(
+    "research_completion_tokens",
+    "Total number of completion tokens used",
+)
+
+_total_tokens_counter = Counter(
+    "research_tokens",
+    "Total number of tokens used",
+)
+
+request_duration_seconds_total = Counter(
+    "research_request_duration_seconds",
+    "Total research request duration in seconds",
+)
 
 
 def record_request_started() -> None:
-    with _lock:
-        _metrics.requests_total += 1
+    requests_total.inc()
 
 
 def record_request_success() -> None:
-    with _lock:
-        _metrics.requests_success += 1
+    requests_success.inc()
 
 
 def record_request_failed() -> None:
-    with _lock:
-        _metrics.requests_failed += 1
+    requests_failed.inc()
 
 
 def record_retry() -> None:
-    with _lock:
-        _metrics.retries_total += 1
+    retries_total.inc()
 
 
 def record_usage(
@@ -45,26 +64,23 @@ def record_usage(
     completion_tokens: int,
     total_tokens: int,
 ) -> None:
-    with _lock:
-        _metrics.prompt_tokens_total += prompt_tokens
-        _metrics.completion_tokens_total += completion_tokens
-        _metrics.total_tokens += total_tokens
+    prompt_tokens_total.inc(prompt_tokens)
+    completion_tokens_total.inc(completion_tokens)
+    _total_tokens_counter.inc(total_tokens)
 
 
 def record_request_duration(duration_seconds: float) -> None:
-    with _lock:
-        _metrics.request_duration_seconds_total += duration_seconds
+    request_duration_seconds_total.inc(duration_seconds)
 
 
 def get_metrics() -> dict:
-    with _lock:
-        return {
-            "requests_total": _metrics.requests_total,
-            "requests_success": _metrics.requests_success,
-            "requests_failed": _metrics.requests_failed,
-            "retries_total": _metrics.retries_total,
-            "prompt_tokens_total": _metrics.prompt_tokens_total,
-            "completion_tokens_total": _metrics.completion_tokens_total,
-            "total_tokens": _metrics.total_tokens,
-            "request_duration_seconds_total": _metrics.request_duration_seconds_total,
-        }
+    return {
+        "requests_total": requests_total._value.get(),
+        "requests_success": requests_success._value.get(),
+        "requests_failed": requests_failed._value.get(),
+        "retries_total": retries_total._value.get(),
+        "prompt_tokens_total": prompt_tokens_total._value.get(),
+        "completion_tokens_total": completion_tokens_total._value.get(),
+        "total_tokens": _total_tokens_counter._value.get(),
+        "request_duration_seconds_total": request_duration_seconds_total._value.get(),
+    }

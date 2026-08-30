@@ -25,10 +25,10 @@ Then visit:
     http://127.0.0.1:8000/docs     -> interactive API docs (auto-generated)
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, field_validator
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from app.metrics import get_metrics
-
 from app.research import ask_research_question
 
 app = FastAPI(title="Research Agent API")
@@ -102,4 +102,7 @@ async def research(request: ResearchRequest):
 
 @app.get("/metrics")
 def metrics():
-    return get_metrics()
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )
