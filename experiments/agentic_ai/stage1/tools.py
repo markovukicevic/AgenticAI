@@ -1,57 +1,71 @@
 from calculator import calculator
+from schemas import CalculatorInput, TimeInput, WeatherInput
+from clock import get_time
 from weather import get_weather
 
-calculator_tool = {
-    "type": "function",
-    "function": {
-        "name": "calculator",
-        "description": "Calculate a mathematical expression.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "expression": {
-                    "type": "string",
-                    "description": "The mathematical expression to calculate."
-                }
-            },
-            "required": ["expression"]
-        }
-    }
-}
 
-weather_tool = {
-    "type": "function",
-    "function": {
-        "name": "get_weather",
-        "description": "Get the current weather for a city.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "city": {
-                    "type": "string",
-                    "description": "The city to get the weather for."
-                }
-            },
-            "required": ["city"]
-        }
+def build_tool_schema(
+    name: str,
+    description: str,
+    input_model: type,
+) -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": input_model.model_json_schema(),
+        },
     }
-}
 
-tools = [
-    calculator_tool,
-    weather_tool,
-]
 
 tool_registry = {
-    "calculator": calculator,
-    "get_weather": get_weather,
+    "calculator": {
+        "function": calculator,
+        "input_model": CalculatorInput,
+        "description": "Calculate a mathematical expression.",
+    },
+    "get_weather": {
+        "function": get_weather,
+        "input_model": WeatherInput,
+        "description": (
+            "Get the current weather for a city. "
+            "Use this tool when the user asks about weather."
+        ),
+    },
+    "get_time": {
+        "function": get_time,
+        "input_model": TimeInput,
+        "description": (
+            "Get the current time for a city. "
+            "Use this tool when the user asks about time."
+        ),
+    }
 }
+
+
+tools = [
+    build_tool_schema(
+        name=tool_name,
+        description=tool["description"],
+        input_model=tool["input_model"],
+    )
+    for tool_name, tool in tool_registry.items()
+]
 
 
 def execute_tool(tool_name, arguments):
     if tool_name not in tool_registry:
-        raise ValueError(f"Unknown tool: {tool_name}")
+        raise ValueError(
+            f"Unknown tool: {tool_name}"
+        )
 
     tool = tool_registry[tool_name]
 
-    return tool(**arguments)
+    validated_arguments = tool["input_model"](
+        **arguments
+    )
+
+    return tool["function"](
+        **validated_arguments.model_dump()
+    )

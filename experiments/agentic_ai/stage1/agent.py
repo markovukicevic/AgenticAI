@@ -12,6 +12,8 @@ load_dotenv()
 
 MODEL = "openrouter/free"
 
+MAX_ITERATIONS = 10
+
 
 def get_client() -> OpenAI:
     api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -38,7 +40,7 @@ def run_agent(user_question: str) -> str:
         }
     ]
 
-    while True:
+    for iteration in range(MAX_ITERATIONS):
         response = client.chat.completions.create(
             model=MODEL,
             messages=messages,
@@ -47,31 +49,90 @@ def run_agent(user_question: str) -> str:
 
         message = response.choices[0].message
 
-        # ---------------------------------------------------------
-        # Case 1: The model has finished and does not need a tool.
-        # ---------------------------------------------------------
-        if not message.tool_calls:
-            return message.content
+        print()
+        print(f"--- LLM iteration {iteration + 1} ---")
 
-        # ---------------------------------------------------------
-        # Case 2: The model wants to use one or more tools.
-        # ---------------------------------------------------------
+        if message.tool_calls:
+            print("Tool calls requested:")
 
-        # Preserve the assistant's tool-call message in the
-        # conversation history.
+            for tool_call in message.tool_calls:
+                print(
+                    f"  Tool: {tool_call.function.name}"
+                )
+                print(
+                    f"  Arguments: {tool_call.function.arguments}"
+                )
+
+        else:
+            print("No tool call. Final answer generated.")
+
+            return message.content or (
+                "The model returned no final answer."
+            )
+
         messages.append(message)
 
         for tool_call in message.tool_calls:
             tool_name = tool_call.function.name
 
-            arguments = json.loads(
-                tool_call.function.arguments
-            )
+            try:
+                arguments = json.loads(
+                    tool_call.function.arguments
+                )
 
-            result = execute_tool(
-                tool_name,
-                arguments,
-            )
+            except json.JSONDecodeError as error:
+                tool_result = (
+                    f"Tool argument error: the arguments for "
+                    f"'{tool_name}' were not valid JSON. "
+                    f"Details: {error}"
+                )
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result,
+                    }
+                )
+
+                continue
+
+            try:
+                result = execute_tool(
+                    tool_name,
+                    arguments,
+                )
+
+            except ValueError as error:
+                tool_result = (
+                    f"Tool error: {error}"
+                )
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result,
+                    }
+                )
+
+                continue
+
+            except Exception as error:
+                tool_result = (
+                    f"Tool '{tool_name}' failed during execution. "
+                    f"Details: {error}"
+                )
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result,
+                    }
+                )
+
+                continue
 
             messages.append(
                 {
@@ -80,6 +141,11 @@ def run_agent(user_question: str) -> str:
                     "content": str(result),
                 }
             )
+
+    return (
+        f"The agent stopped because it reached the maximum "
+        f"iteration limit of {MAX_ITERATIONS}."
+    )
 
 
 if __name__ == "__main__":
