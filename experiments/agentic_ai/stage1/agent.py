@@ -52,22 +52,21 @@ def run_agent(user_question: str) -> str:
         print()
         print(f"--- LLM iteration {iteration + 1} ---")
 
-        if message.tool_calls:
-            print("Tool calls requested:")
-
-            for tool_call in message.tool_calls:
-                print(
-                    f"  Tool: {tool_call.function.name}"
-                )
-                print(
-                    f"  Arguments: {tool_call.function.arguments}"
-                )
-
-        else:
+        if not message.tool_calls:
             print("No tool call. Final answer generated.")
 
             return message.content or (
                 "The model returned no final answer."
+            )
+
+        print("Tool calls requested:")
+
+        for tool_call in message.tool_calls:
+            print(
+                f"  Tool: {tool_call.function.name}"
+            )
+            print(
+                f"  Arguments: {tool_call.function.arguments}"
             )
 
         messages.append(message)
@@ -81,64 +80,45 @@ def run_agent(user_question: str) -> str:
                 )
 
             except json.JSONDecodeError as error:
-                tool_result = (
-                    f"Tool argument error: the arguments for "
-                    f"'{tool_name}' were not valid JSON. "
-                    f"Details: {error}"
-                )
+                tool_result = {
+                    "success": False,
+                    "data": None,
+                    "error": (
+                        f"Invalid JSON arguments: {error}"
+                    ),
+                }
 
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
-                        "content": tool_result,
+                        "content": json.dumps(tool_result),
                     }
                 )
 
                 continue
 
-            try:
-                result = execute_tool(
-                    tool_name,
-                    arguments,
+            result = execute_tool(
+                tool_name,
+                arguments,
+            )
+
+            if result.success:
+                print(
+                    f"  Tool result: success → {result.data}"
                 )
-
-            except ValueError as error:
-                tool_result = (
-                    f"Tool error: {error}"
+            else:
+                print(
+                    f"  Tool result: failure → {result.error}"
                 )
-
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": tool_result,
-                    }
-                )
-
-                continue
-
-            except Exception as error:
-                tool_result = (
-                    f"Tool '{tool_name}' failed during execution. "
-                    f"Details: {error}"
-                )
-
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": tool_result,
-                    }
-                )
-
-                continue
 
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": tool_call.id,
-                    "content": str(result),
+                    "content": json.dumps(
+                        result.model_dump()
+                    ),
                 }
             )
 

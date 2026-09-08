@@ -1,7 +1,21 @@
-def get_weather(city: str, units: str = "celsius") -> str:
-    return f"The weather in {city} is sunny ({units})."
+from schemas import WeatherResult
+
+
+def get_weather(
+    city: str,
+    units: str = "celsius",
+) -> WeatherResult:
+    return WeatherResult(
+        city=city,
+        temperature=18,
+        unit=units,
+        condition="sunny",
+    )
 
 
 if __name__ == "__main__":
-    print(get_weather("Berlin"))
-    print(get_weather("Berlin", "fahrenheit"))
+    result = get_weather("Berlin")
+
+    print(result)
+    print(type(result))
+    print(result.model_dump())
